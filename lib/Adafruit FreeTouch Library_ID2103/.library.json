@@ -1,0 +1,37 @@
+{
+    "description": "Arduino library for QTouch on samd21 microcontroller", 
+    "repository": {
+        "url": "https://github.com/adafruit/Adafruit_FreeTouch", 
+        "type": "git"
+    }, 
+    "platforms": [], 
+    "export": {
+        "exclude": [
+            "extras", 
+            "docs", 
+            "tests", 
+            "test", 
+            "*.doxyfile", 
+            "*.pdf"
+        ], 
+        "include": null
+    }, 
+    "authors": [
+        {
+            "maintainer": true, 
+            "name": "Adafruit", 
+            "url": null, 
+            "email": "info@adafruit.com"
+        }
+    ], 
+    "keywords": [
+        "sensors"
+    ], 
+    "id": 2103, 
+    "name": "Adafruit FreeTouch Library", 
+    "frameworks": [
+        "arduino"
+    ], 
+    "version": "1.0.1", 
+    "homepage": null
+}
