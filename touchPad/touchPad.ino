@@ -87,6 +87,7 @@ byte dscc = 0;
 bool changeCheck = 0;
 
 bool set = 0;
+bool colorLock[2];
 
 
 // Remap code
@@ -185,7 +186,7 @@ void loop() {
       if (Serial.available() > 0) {
         String serialInput = Serial.readString(); byte input= serialInput.toInt();
         if (input == 0) remapSerial(); else if (input == 1) changeMode();
-      Serial.println(); Serial.println("saved, press 0 to enter the serial remapper or 1 to set the LED mode."); }
+        Serial.println("saved, press 0 to enter the serial remapper or 1 to set the LED mode."); Serial.println(); }
       if (!Serial) set = 0; // If the serial monitor is closed, reset so it can prompt the user to press 0 again.
       previousMillis = millis();
     }
@@ -195,8 +196,10 @@ void loop() {
 
   // Set LED mode
   if (ledMode == 0) cycle();
-  else if (ledMode == 1) colorChange();
-  else bps();
+  if (ledMode == 1) colorChange();
+  if (ledMode == 2) bps();
+  if (ledMode == 3 && colorLock[0] == 0) { setColor(0, 0, 0); colorLock[0] = 1; }
+  if (ledMode != 3 && colorLock[0] == 1) colorLock[0] = 0;
 
   // Keybnoard code
   keyboard();
@@ -255,6 +258,8 @@ void cycle() {
   }
 }
 
+void setColor(byte r, byte g, byte b) { dotStar.setPixelColor(0, r, g, b); dotStar.show(); }
+
 // This is used in the serial configurator when it's waiting for an input
 void fastCycle() { if ((millis() - lightMillis) > 1) { wheel(cycleCount); cycleCount++; dotStar.setPixelColor(0, rgb[0], rgb[1], rgb[2]); dotStar.show(); lightMillis = millis(); } }
 
@@ -299,12 +304,26 @@ void wheel(byte shortColor) {
 
 void changeMode() {
   Serial.println("Select an LED mode."); Serial.println();
+  Serial.println("Num |  Mode  | Description");
+  Serial.println("--------------------------------------------------");
+  Serial.println(" 0  |  Cycle | Cycles through rainbow");
+  Serial.println("    |        | Turns to white when keys are pressed");
+  Serial.println("    |        | Turns off when side button is pressed");
+  Serial.println("----------------------------------------------------");
+  Serial.println(" 1  |   BPS  | Color changes from blue to green to");
+  Serial.println("    |        | red, depending on how many times the");
+  Serial.println("    |        | keys are pressed per second");
+  Serial.println("----------------------------------------------------");
+  Serial.println(" 2  |  Color | Color changes from blue to green to");
+  Serial.println("    | Change | red every time a key is pressed");
+  Serial.println("----------------------------------------------------");
+  Serial.println(" 3  |   Off  | Turns LED off (green LED is always on)");
 
   while(!Serial.available()){ fastCycle(); }
   String serialInput = Serial.readString(); ledMode = serialInput.toInt();
   for (byte x=0; x<3; x++) rgb[x] = 0;
   EEPROM.write(20, ledMode); EEPROM.commit();
-  Serial.print("Mode ");
+  Serial.println(); Serial.print("Mode ");
   blinkLEDs(2);
 }
 
@@ -468,7 +487,7 @@ void remapSerial() {
     } // Mapping loop
   } // Key for loop
   EEPROM.commit();
-  Serial.print("Mapping ");
+  Serial.println(); Serial.println(); Serial.print("Mapping ");
 
 } // Remapper loop
 
