@@ -90,6 +90,9 @@ bool changeCheck = 0;
 bool set = 0;
 bool colorLock[2];
 
+byte reactiveStep;
+byte reactCycle = 170;
+
 
 // Remap code
 byte specialLength = 34; // Number of "special keys"
@@ -195,11 +198,13 @@ void loop() {
 
   // Set LED mode
   if (ledMode == 0) cycle();
-  if (ledMode == 1) colorChange();
-  if (ledMode == 2) bps();
-  if (ledMode == 3 && colorLock[0] == 0) { setColor(0, 0, 0); colorLock[0] = 1; }
-  if (ledMode != 3 && colorLock[0] == 1) colorLock[0] = 0;
-  if (ledMode == 4) customMode();
+  if (ledMode == 1) reactive(0);
+  if (ledMode == 2) reactive(1);
+  if (ledMode == 3) colorChange();
+  if (ledMode == 4) bps();
+  if (ledMode == 5) customMode();
+  if (ledMode == 6 && colorLock[0] == 0) { setColor(0, 0, 0); colorLock[0] = 1; }
+  if (ledMode != 6 && colorLock[0] == 1) colorLock[0] = 0;
 
   // Keybnoard code
   keyboard();
@@ -226,9 +231,13 @@ void serialDebug() {
     for (byte x=0; x<numkeys; x++) { Serial.print("Button "); Serial.print(x+1); Serial.print(": "); Serial.println(pressedLock[x]); }
     Serial.println("***************** RGB Values *****************");
     for (byte x=0; x<3; x++) { Serial.print(rgb[x]); if(x<2) Serial.print(", "); else Serial.println(); }
+    Serial.print("CycleCount: "); Serial.println(cycleCount);
     Serial.println("***************** BPS Values *****************");
     for (byte x=0; x<3; x++) { Serial.print(bpsBuffer[x]); if(x<2) Serial.print(", "); else Serial.println(); }
-    Serial.print("Counter: "); Serial.println(countCheck);
+    Serial.println("****************** Reactive ******************");
+    Serial.print("ReactiveStep: "); Serial.println(reactiveStep);
+
+    Serial.println();Serial.print("Counter: "); Serial.println(countCheck);
 
     // Any more debugging output should go here so it outputs at the same rate.
 
@@ -258,16 +267,14 @@ void cycle() {
   }
 }
 
-byte reactiveStep;
-bool reactivePress;
-
 void reactive(bool flip) {
-  if ((millis() - lightMillis) > lightInterval) {
+  if ((millis() - lightMillis) > 0) {
     // If either key is pressed, turn LED white.
-    for (byte x=0; x<2; x++) if (pressed[x]) reactivePress;
-    // Otherwise, cycle through colors.
-    if (!pressed[0] && !pressed[1]) { wheel(cycleCount); cycleCount++; dotStar.setPixelColor(0, rgb[0], rgb[1], rgb[2]); }
-    if (pressed[numkeys]) dotStar.setPixelColor(0, 0x000000);
+    for (byte x=0; x<numkeys; x++) if ((pressed[x] && flip == 0) || (!pressed[0] && !pressed[1] && flip == 1)) { reactiveStep = 1; reactCycle = 169; for (byte y=0; y<3; y++) rgb[y] = 255; }
+    if (reactiveStep == 1) { rgb[0] = rgb[0]-1; rgb[1] = rgb[0]; if (rgb[0] == 0) reactiveStep = 2; } // white to red
+    if (reactiveStep == 2) { wheel(reactCycle); reactCycle--; if (rgb[0] == 255) reactiveStep = 3; } // red to green to blue
+    if (reactiveStep == 3) { if (rgb[0] != 0) rgb[0] = rgb[0]-1; }
+    dotStar.setPixelColor(0, rgb[0], rgb[1], rgb[2]);
     dotStar.show();
     lightMillis = millis();
   }
@@ -342,29 +349,38 @@ void mainMenu(byte reenter) {
 
 void changeMode() {
   Serial.println("Select an LED mode."); Serial.println();
-  Serial.println("Num |  Mode  | Description");
-  Serial.println("--------------------------------------------------");
-  Serial.println(" 0  |  Cycle | Cycles through rainbow");
-  Serial.println("    |        | Turns to white when keys are pressed");
-  Serial.println("    |        | Turns off when side button is pressed");
-  Serial.println("----------------------------------------------------");
-  Serial.println(" 1  |  Color | Color changes from blue to green to");
-  Serial.println("    | Change | red every time a key is pressed");
-  Serial.println("----------------------------------------------------");
-  Serial.println(" 2  |   BPS  | Color changes from blue to green to");
-  Serial.println("    |        | red, depending on how many times the");
-  Serial.println("    |        | keys are pressed per second");
-  Serial.println("----------------------------------------------------");
-  Serial.println(" 3  |   Off  | Turns LED off (green LED is always on)");
-  Serial.println("--------------------------------------------------");
-  Serial.println(" 4  | Custom | Uses custom color set in settings.");
-  Serial.println("    |        | Turns to white when keys are pressed");
-  Serial.println("    |        | Turns off when side button is pressed");
+  Serial.println("Num |   Mode   | Description");
+  Serial.println("-----------------------------------------------------");
+  Serial.println(" 0  |   Cycle  | Cycles through rainbow");
+  Serial.println("    |          | Turns to white when keys are pressed");
+  Serial.println("    |          | Turns off when side button is pressed");
+  Serial.println("-----------------------------------------------------");
+  Serial.println(" 1  | Reactive | Turns to white when pressed");
+  Serial.println("    |          | Fades through r>g>b>off when released");
+  Serial.println("-----------------------------------------------------");
+  Serial.println(" 2  | Reactive | Fades through r>g>b>off when pressed");
+  Serial.println("    | Inverted | Turns to white when released");
+  Serial.println("-----------------------------------------------------");
+  Serial.println(" 3  |  Color   | Color changes from blue to green to");
+  Serial.println("    |  Change  | red every time a key is pressed");
+  Serial.println("-----------------------------------------------------");
+  Serial.println(" 4  |   BPS    | Color changes from blue to green to");
+  Serial.println("    |          | red, depending on how many times the");
+  Serial.println("    |          | keys are pressed per second");
+  Serial.println("-----------------------------------------------------");
+  Serial.println(" 5  |  Custom  | Uses custom color set in settings.");
+  Serial.println("    |          | Turns to white when keys are pressed");
+  Serial.println("    |          | Turns off when side button is pressed");
+  Serial.println("-----------------------------------------------------");
+  Serial.println(" 6  |    Off   | Turns LED off (green LED is always on)");
 
-  while(!Serial.available()){ fastCycle(); }
-  String serialInput = Serial.readString(); ledMode = serialInput.toInt();
-  for (byte x=0; x<3; x++) rgb[x] = 0;
-  EEPROM.write(20, ledMode); EEPROM.commit();
+  while (true){
+    while(!Serial.available()){ fastCycle(); }
+    String serialInput = Serial.readString(); byte inputBuffer = serialInput.toInt();
+    if (inputBuffer > 6) Serial.println("Invalid value, please try again.");
+    if (inputBuffer <=6) { ledMode=inputBuffer; break; } }
+  for (byte x=0; x<3; x++) rgb[x] = 0; // Reset LEDs
+  EEPROM.write(20, ledMode); EEPROM.commit(); // Save value to EEPROM
   Serial.println(); Serial.print("Mode ");
   blinkLEDs(2);
 }
@@ -376,7 +392,7 @@ void customSet() {
     Serial.print(csRGB[x]);
     while(!Serial.available()){ fastCycle(); }
     String serialInput = Serial.readString();
-    custom[x] = serialInput.toInt();
+    custom[x] = serialInput.toInt(); // no error checking necessary because custom is a byte, so it will automatically convert it if an invalid value is given
     EEPROM.write(30+x, custom[x]);
     Serial.print(custom[x]);
   }
