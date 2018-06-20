@@ -54,6 +54,7 @@ bool pressed[numkeys+1];
 byte mapping[numkeys+1][3];
 byte rgb[3];
 byte bpsBuffer[3];
+byte custom[3] = { 200, 0, 200 };
 
 // This lock makes it so the key is only pressed/depressed once, rather than spamming either.
 // Only one event is required for each, so this functions as a normal keyboard would.
@@ -130,15 +131,13 @@ byte ledMode = 0;
 */
 
 void setup() {
-  // This will need to be universal after the remapper is implemented
-  #if defined (DEBUG)
-    Serial.begin(9600);
-  #endif
+  Serial.begin(9600);
 
   // Initialize EEPROM
 	if (EEPROM.read(0) != version) {
 		EEPROM.write(0, version);
 		EEPROM.write(20, ledMode);
+    for (byte x=0; x<3; x++) EEPROM.write(30+x, custom[x]);
 		for (byte x = 0; x <= numkeys; x++) { // default custom RGB values
 			for (byte  y= 0; y < 3; y++) { if (y == 0) EEPROM.write(40+(x*3)+y, initMapping[x]); if (y > 0) EEPROM.write(40+(x*3)+y, 0);	}
 		}
@@ -146,6 +145,7 @@ void setup() {
 	}
 	// Load values from EEPROM
 	for (int x = 0; x <= numkeys; x++) { for (int  y= 0; y < 3; y++) mapping[x][y] = EEPROM.read(40+(x*3)+y); }
+  for (byte x=0; x<3; x++) custom[x] = EEPROM.read(30+x);
   ledMode = EEPROM.read(20);
 
   // Initialize inputs
@@ -182,11 +182,10 @@ void loop() {
   #else
     if ((millis() - previousMillis) > 1000) { // Check once a second to reduce overhead
       // Run once when serial monitor is opened to avoid flooding the serial monitor
-      if (Serial && set == 0) { Serial.println("Press 0 to enter the serial remapper or 1 to set the LED mode."); set = 1; }
+      if (Serial && set == 0) { mainMenu(0); set = 1; }
       if (Serial.available() > 0) {
         String serialInput = Serial.readString(); byte input= serialInput.toInt();
-        if (input == 0) remapSerial(); else if (input == 1) changeMode();
-        Serial.println("saved, press 0 to enter the serial remapper or 1 to set the LED mode."); Serial.println(); }
+        if (input == 0) remapSerial(); if (input == 1) changeMode(); if (input == 2) customSet(); if (input == 3) mainMenu(2); else mainMenu(1); }
       if (!Serial) set = 0; // If the serial monitor is closed, reset so it can prompt the user to press 0 again.
       previousMillis = millis();
     }
@@ -200,6 +199,7 @@ void loop() {
   if (ledMode == 2) bps();
   if (ledMode == 3 && colorLock[0] == 0) { setColor(0, 0, 0); colorLock[0] = 1; }
   if (ledMode != 3 && colorLock[0] == 1) colorLock[0] = 0;
+  if (ledMode == 4) customMode();
 
   // Keybnoard code
   keyboard();
@@ -252,7 +252,22 @@ void cycle() {
     for (byte x=0; x<2; x++) if (pressed[x]) dotStar.setPixelColor(0, 0xFFFFFF);
     // Otherwise, cycle through colors.
     if (!pressed[0] && !pressed[1]) { wheel(cycleCount); cycleCount++; dotStar.setPixelColor(0, rgb[0], rgb[1], rgb[2]); }
-    if (pressed[2]) dotStar.setPixelColor(0, 0x000000);
+    if (pressed[numkeys]) dotStar.setPixelColor(0, 0x000000);
+    dotStar.show();
+    lightMillis = millis();
+  }
+}
+
+byte reactiveStep;
+bool reactivePress;
+
+void reactive(bool flip) {
+  if ((millis() - lightMillis) > lightInterval) {
+    // If either key is pressed, turn LED white.
+    for (byte x=0; x<2; x++) if (pressed[x]) reactivePress;
+    // Otherwise, cycle through colors.
+    if (!pressed[0] && !pressed[1]) { wheel(cycleCount); cycleCount++; dotStar.setPixelColor(0, rgb[0], rgb[1], rgb[2]); }
+    if (pressed[numkeys]) dotStar.setPixelColor(0, 0x000000);
     dotStar.show();
     lightMillis = millis();
   }
@@ -282,6 +297,18 @@ void colorChange(){
   }
 }
 
+void customMode() {
+  if ((millis() - lightMillis) > lightInterval) {
+    // If either key is pressed, turn LED white.
+    for (byte x=0; x<2; x++) if (pressed[x]) dotStar.setPixelColor(0, 0xFFFFFF);
+    // Otherwise, cycle through colors.
+    if (!pressed[0] && !pressed[1]) { dotStar.setPixelColor(0, custom[0], custom[1], custom[2]); }
+    if (pressed[numkeys]) dotStar.setPixelColor(0, 0x000000);
+    dotStar.show();
+    lightMillis = millis();
+  }
+}
+
 // Blinks LEDs based on paramteter value
 void blinkLEDs(byte times) { for (int y = 0; y < times; y++) { dotStar.setPixelColor(0, 0x000000); dotStar.show(); delay(20); dotStar.setPixelColor(0, 0xFFFFFF); dotStar.show(); delay(50); } }
 
@@ -293,14 +320,25 @@ void wheel(byte shortColor) {
 }
 
 /*
-███████ ███████ ██████  ██  █████  ██           ██████  ██████  ███    ██ ███████ ██  ██████  ██    ██ ██████   █████  ████████  ██████  ██████
-██      ██      ██   ██ ██ ██   ██ ██          ██      ██    ██ ████   ██ ██      ██ ██       ██    ██ ██   ██ ██   ██    ██    ██    ██ ██   ██
-███████ █████   ██████  ██ ███████ ██          ██      ██    ██ ██ ██  ██ █████   ██ ██   ███ ██    ██ ██████  ███████    ██    ██    ██ ██████
-     ██ ██      ██   ██ ██ ██   ██ ██          ██      ██    ██ ██  ██ ██ ██      ██ ██    ██ ██    ██ ██   ██ ██   ██    ██    ██    ██ ██   ██
-███████ ███████ ██   ██ ██ ██   ██ ███████      ██████  ██████  ██   ████ ██      ██  ██████   ██████  ██   ██ ██   ██    ██     ██████  ██   ██
+███████ ███████ ██████  ██  █████  ██          ███████ ███████ ████████ ████████ ██ ███    ██  ██████  ███████
+██      ██      ██   ██ ██ ██   ██ ██          ██      ██         ██       ██    ██ ████   ██ ██       ██
+███████ █████   ██████  ██ ███████ ██          ███████ █████      ██       ██    ██ ██ ██  ██ ██   ███ ███████
+     ██ ██      ██   ██ ██ ██   ██ ██               ██ ██         ██       ██    ██ ██  ██ ██ ██    ██      ██
+███████ ███████ ██   ██ ██ ██   ██ ███████     ███████ ███████    ██       ██    ██ ██   ████  ██████  ███████
 */
 
 #ifndef DEBUG
+
+void mainMenu(byte reenter) {
+  if (reenter == 2) Serial.print("Invalid, p");
+  else if (reenter == 1) Serial.print("Saved, p");
+  else Serial.print("P");
+  Serial.println("lease enter the number for the corresponding setting you'd like to change:");
+  Serial.println("0 | Remap keys");
+  Serial.println("1 | Set LED mode");
+  Serial.println("2 | Change color for custom mode");
+  Serial.println();
+}
 
 void changeMode() {
   Serial.println("Select an LED mode."); Serial.println();
@@ -310,20 +348,41 @@ void changeMode() {
   Serial.println("    |        | Turns to white when keys are pressed");
   Serial.println("    |        | Turns off when side button is pressed");
   Serial.println("----------------------------------------------------");
-  Serial.println(" 1  |   BPS  | Color changes from blue to green to");
+  Serial.println(" 1  |  Color | Color changes from blue to green to");
+  Serial.println("    | Change | red every time a key is pressed");
+  Serial.println("----------------------------------------------------");
+  Serial.println(" 2  |   BPS  | Color changes from blue to green to");
   Serial.println("    |        | red, depending on how many times the");
   Serial.println("    |        | keys are pressed per second");
   Serial.println("----------------------------------------------------");
-  Serial.println(" 2  |  Color | Color changes from blue to green to");
-  Serial.println("    | Change | red every time a key is pressed");
-  Serial.println("----------------------------------------------------");
   Serial.println(" 3  |   Off  | Turns LED off (green LED is always on)");
+  Serial.println("--------------------------------------------------");
+  Serial.println(" 4  | Custom | Uses custom color set in settings.");
+  Serial.println("    |        | Turns to white when keys are pressed");
+  Serial.println("    |        | Turns off when side button is pressed");
 
   while(!Serial.available()){ fastCycle(); }
   String serialInput = Serial.readString(); ledMode = serialInput.toInt();
   for (byte x=0; x<3; x++) rgb[x] = 0;
   EEPROM.write(20, ledMode); EEPROM.commit();
   Serial.println(); Serial.print("Mode ");
+  blinkLEDs(2);
+}
+
+void customSet() {
+  String csRGB[] = { "Blue: ", ", Green: ", ", Red: " };
+  Serial.println("Enter 0-255 value for each color.");
+  for (byte x=0; x<3; x++) {
+    Serial.print(csRGB[x]);
+    while(!Serial.available()){ fastCycle(); }
+    String serialInput = Serial.readString();
+    custom[x] = serialInput.toInt();
+    EEPROM.write(30+x, custom[x]);
+    Serial.print(custom[x]);
+  }
+  Serial.println();
+  EEPROM.commit();
+  Serial.println(); Serial.print("Custom colors ");
   blinkLEDs(2);
 }
 
@@ -352,10 +411,10 @@ void remapSerial() {
   Serial.print("Current values are: ");
   for (int x = 0; x < numkeys; x++) {
     for (int y = 0; y < 3; y++) {
-      byte mapCheck = int(mapping[x][y]);
+      byte mapCheck = mapping[x][y];
       if (mapCheck != 0){ // If not null...
         // Print if regular character (prints as a char)
-        if (mapCheck > 33 && mapCheck < 126) Serial.print(mapping[x][y]);
+        if (mapCheck > 33 && mapCheck < 126) Serial.print(char(mapping[x][y]));
         // Otherwise, check it through the byte array and print the text version of the key.
         else for (int z = 0; z < specialLength; z++) if (specialByte[z] == mapCheck){
           Serial.print(specialKeys[z]);
