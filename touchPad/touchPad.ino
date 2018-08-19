@@ -25,20 +25,32 @@
 #include <Keyboard.h>
 #include <FlashAsEEPROM.h>
 #include <Adafruit_DotStar.h>
+#include <Adafruit_NeoPixel.h>
 
-// Comment out for no serial output
+// FOR ARDUINO IDE USERS:
+// UNCOMMENT THESE THREE LINES FOR 2K SUPPORT (or use PlatformIO )
+// #define numkeys 2
+// #define DATAPIN 7
+// #define DCLOCKPIN 8
+
+// UNCOMMENT THIS LINE FOR DEBUGGING INFO IN SERIAL MONITOR (replaces remapper)
 // #define DEBUG
 
 #if numkeys == 2
 byte ftPin[] = { 3, 4, 1 }; // Trinket FreeTouch pins
 byte initMapping[] = { 122, 120, 177 };
+// Value for determining keypress for FreeTouch
+int pressThreshold[] = { 400, 400, 550 };
 #else
 byte ftPin[] = { A0, A1, A2, A3, 9 }; // ItsyBitsy FreeTouch pins
 byte initMapping[] = { 122, 120, 99, 118, 177 };
+// Value for determining keypress for FreeTouch
+int pressThreshold[] = { 600, 400, 400, 500, 550 };
 #endif
 
 // Constructors
 Adafruit_DotStar dotStar = Adafruit_DotStar( 1, DATAPIN, CLOCKPIN, DOTSTAR_RGB);
+Adafruit_NeoPixel pixels = Adafruit_NeoPixel(numkeys, 5, NEO_GBR + NEO_KHZ800); // Only used on 4K
 
 Adafruit_FreeTouch qt_1 = Adafruit_FreeTouch(ftPin[0], OVERSAMPLE_8, RESISTOR_50K, FREQ_MODE_NONE);
 Adafruit_FreeTouch qt_2 = Adafruit_FreeTouch(ftPin[1], OVERSAMPLE_8, RESISTOR_50K, FREQ_MODE_NONE);
@@ -79,8 +91,7 @@ byte cycleCount;
 unsigned long lightInterval = 10;
 unsigned long reportInterval = 10;
 unsigned long bpsInterval = 1000;
-// Value for determining keypress for FreeTouch
-int pressThreshold[] = { 450, 500 };
+
 
 byte changeVal = 10; // This is the amount that the colors change per press on the color change mode
 byte bpsCount;
@@ -163,6 +174,8 @@ void setup() {
   // Start LED lib
   dotStar.begin(); // Initialize pins for output
   dotStar.show();  // Turn all LEDs off ASAP
+  pixels.begin(); // Initialize pins for output
+  pixels.show();  // Turn all LEDs off ASAP
 }
 
 /*
@@ -224,11 +237,11 @@ void serialDebug() {
   if ((millis() - reportMillis) > reportInterval) {
     Serial.write(27); Serial.print("[2J"); Serial.write(27); Serial.print("[H"); // Resets serial monitor
     Serial.println("***************** Int Values *****************");
-    for (byte x=0; x<numkeys; x++) { Serial.print("Button "); Serial.print(x+1); Serial.print(": "); Serial.println(qt[x]); }
+    for (byte x=0; x<=numkeys; x++) { Serial.print("Button "); Serial.print(x+1); Serial.print(": "); Serial.println(qt[x]); }
     Serial.println("***************** Bool Values *****************");
-    for (byte x=0; x<numkeys; x++) { Serial.print("Button "); Serial.print(x+1); Serial.print(": "); Serial.println(pressed[x]); }
+    for (byte x=0; x<=numkeys; x++) { Serial.print("Button "); Serial.print(x+1); Serial.print(": "); Serial.println(pressed[x]); }
     Serial.println("***************** pressedLock *****************");
-    for (byte x=0; x<numkeys; x++) { Serial.print("Button "); Serial.print(x+1); Serial.print(": "); Serial.println(pressedLock[x]); }
+    for (byte x=0; x<=numkeys; x++) { Serial.print("Button "); Serial.print(x+1); Serial.print(": "); Serial.println(pressedLock[x]); }
     Serial.println("***************** RGB Values *****************");
     for (byte x=0; x<3; x++) { Serial.print(rgb[x]); if(x<2) Serial.print(", "); else Serial.println(); }
     Serial.print("CycleCount: "); Serial.println(cycleCount);
@@ -258,11 +271,19 @@ void serialDebug() {
 void cycle() {
   if ((millis() - lightMillis) > lightInterval) {
     // If either key is pressed, turn LED white.
-    for (byte x=0; x<2; x++) if (pressed[x]) dotStar.setPixelColor(0, 0xFFFFFF);
+    for (byte x=0; x<numkeys; x++) if (pressed[x]) { dotStar.setPixelColor(0, 0xFFFFFF); pixels.setPixelColor(0, 0xFFFFFF/2); }
     // Otherwise, cycle through colors.
-    if (!pressed[0] && !pressed[1]) { wheel(cycleCount); cycleCount++; dotStar.setPixelColor(0, rgb[0], rgb[1], rgb[2]); }
-    if (pressed[numkeys]) dotStar.setPixelColor(0, 0x000000);
+    wheel(cycleCount);
+    cycleCount++;
+    #if numkeys==4
+        if (!pressed[0] && !pressed[1] ) { dotStar.setPixelColor(0, rgb[0], rgb[1], rgb[2]); }
+        if (!pressed[2] && !pressed[3]) { pixels.setPixelColor(0, rgb[0]/2, rgb[1]/2, rgb[2]/2); }
+    #else
+      if (!pressed[0] && !pressed[1]) { dotStar.setPixelColor(0, rgb[0], rgb[1], rgb[2]); }
+    #endif
+    if (pressed[numkeys]) { dotStar.setPixelColor(0, 0x000000); pixels.setPixelColor(0, 0x000000); }
     dotStar.show();
+    pixels.show();
     lightMillis = millis();
   }
 }
@@ -276,14 +297,16 @@ void reactive(bool flip) {
     if (reactiveStep == 3) { if (rgb[0] != 0) rgb[0] = rgb[0]-1; }
     dotStar.setPixelColor(0, rgb[0], rgb[1], rgb[2]);
     dotStar.show();
+    pixels.setPixelColor(0, rgb[0], rgb[1], rgb[2]);
+    pixels.show();
     lightMillis = millis();
   }
 }
 
-void setColor(byte r, byte g, byte b) { dotStar.setPixelColor(0, r, g, b); dotStar.show(); }
+void setColor(byte r, byte g, byte b) { dotStar.setPixelColor(0, r, g, b); dotStar.show(); pixels.setPixelColor(0, r/2, g/2, b/2); pixels.show(); }
 
 // This is used in the serial configurator when it's waiting for an input
-void fastCycle() { if ((millis() - lightMillis) > 1) { wheel(cycleCount); cycleCount++; dotStar.setPixelColor(0, rgb[0], rgb[1], rgb[2]); dotStar.show(); lightMillis = millis(); } }
+void fastCycle() { if ((millis() - lightMillis) > 1) { wheel(cycleCount); cycleCount++; dotStar.setPixelColor(0, rgb[0], rgb[1], rgb[2]); dotStar.show(); pixels.setPixelColor(0, rgb[0]/2, rgb[1]/2, rgb[2]/2); pixels.show(); lightMillis = millis(); } }
 
 void bps() {
 
@@ -293,31 +316,33 @@ void bps() {
   if ((millis() - bpsLEDMillis) > 1) {
     for (byte x=0; x<3; x++) { if (rgb[x] > bpsBuffer[x]) bpsBuffer[x] = bpsBuffer[x]+1; if (rgb[x] < bpsBuffer[x]) bpsBuffer[x] = bpsBuffer[x]-1; }
     dotStar.setPixelColor(0, bpsBuffer[0], bpsBuffer[1], bpsBuffer[2]); dotStar.show();
+    pixels.setPixelColor(0, bpsBuffer[0]/2, bpsBuffer[1]/2, bpsBuffer[2]/2); pixels.show();
     bpsLEDMillis = millis();
   }
 }
 
 void colorChange(){
-  if (changeCheck == 0) { wheel(dscc); dotStar.setPixelColor(0, rgb[0], rgb[1], rgb[2]); dotStar.show(); changeCheck = 1; }
+  if (changeCheck == 0) { wheel(dscc); dotStar.setPixelColor(0, rgb[0], rgb[1], rgb[2]); dotStar.show(); pixels.setPixelColor(0, rgb[0]/2, rgb[1]/2, rgb[2]/2); pixels.show(); changeCheck = 1; }
   for (byte x=0; x<numkeys; x++){
-    if (pressed[x] && pressedLock[x]) { dscc += changeVal; wheel(dscc); dotStar.setPixelColor(0, rgb[0], rgb[1], rgb[2]); dotStar.show(); }
+    if (pressed[x] && pressedLock[x]) { dscc += changeVal; wheel(dscc); dotStar.setPixelColor(0, rgb[0], rgb[1], rgb[2]); dotStar.show(); pixels.setPixelColor(0, rgb[0]/2, rgb[1]/2, rgb[2]/2); pixels.show(); }
   }
 }
 
 void customMode() {
   if ((millis() - lightMillis) > lightInterval) {
     // If either key is pressed, turn LED white.
-    for (byte x=0; x<2; x++) if (pressed[x]) dotStar.setPixelColor(0, 0xFFFFFF);
+    for (byte x=0; x<2; x++) if (pressed[x]) { dotStar.setPixelColor(0, 0xFFFFFF); pixels.setPixelColor(0, 0xFFFFFF/2); }
     // Otherwise, cycle through colors.
-    if (!pressed[0] && !pressed[1]) { dotStar.setPixelColor(0, custom[0], custom[1], custom[2]); }
-    if (pressed[numkeys]) dotStar.setPixelColor(0, 0x000000);
+    if (!pressed[0] && !pressed[1]) { dotStar.setPixelColor(0, custom[0], custom[1], custom[2]); pixels.setPixelColor(0, custom[0]/2, custom[1]/2, custom[2]/2); }
+    if (pressed[numkeys]) dotStar.setPixelColor(0, 0x000000); pixels.setPixelColor(0, 0x000000);
     dotStar.show();
+    pixels.show();
     lightMillis = millis();
   }
 }
 
 // Blinks LEDs based on paramteter value
-void blinkLEDs(byte times) { for (int y = 0; y < times; y++) { dotStar.setPixelColor(0, 0x000000); dotStar.show(); delay(20); dotStar.setPixelColor(0, 0xFFFFFF); dotStar.show(); delay(50); } }
+void blinkLEDs(byte times) { for (int y = 0; y < times; y++) { dotStar.setPixelColor(0, 0x000000); dotStar.show(); pixels.setPixelColor(0, 0x000000); pixels.show(); delay(20); dotStar.setPixelColor(0, 0xFFFFFF); dotStar.show(); pixels.setPixelColor(0, 0xFFFFFF/2); pixels.show(); delay(50); } }
 
 // Converts a byte into 3 bytes for R, G, and B color and stores it into the rgb[] array.
 void wheel(byte shortColor) {
@@ -425,7 +450,7 @@ void remapSerial() {
 
   // Print current EEPROM values
   Serial.print("Current values are: ");
-  for (int x = 0; x < numkeys; x++) {
+  for (int x = 0; x <= numkeys; x++) {
     for (int y = 0; y < 3; y++) {
       byte mapCheck = mapping[x][y];
       if (mapCheck != 0){ // If not null...
@@ -439,7 +464,7 @@ void remapSerial() {
       }
     }
     // Print delineation
-    if (x < (numkeys - 1)) Serial.print(", ");
+    if (x < (numkeys)) Serial.print(", ");
   }
   Serial.println();
   // End of print
@@ -486,7 +511,7 @@ void remapSerial() {
   Serial.println("no printable characters, finish by entering 'xx'");
   // End of table
 
-  for (int x = 0; x < numkeys; x++) { // Main for loop for each key
+  for (int x = 0; x <= numkeys; x++) { // Main for loop for each key
 
     byte y = 0; // External loop counter for while loop
     byte z = 0; // quickfix for bug causing wrong input slots to be saved
@@ -503,13 +528,14 @@ void remapSerial() {
             EEPROM.write((40+(x*3)+y), 0);
             mapping[x][y] = 0;
           }
-          if (x < numkeys-1) Serial.print("(finished key,) ");
-          if (x == numkeys-1) Serial.print("(finished key)");
+          if (x < numkeys) Serial.print("(finished key,) ");
+          if (x == numkeys) Serial.print("(finished key)");
           break;
         }
         // If user otherwise finishes inputs
         Serial.print(serialInput); // Print once
-        if (x < 5) Serial.print(", ");
+        // if (x < 5) Serial.print(", ");
+        if (x < numkeys) Serial.print(", ");
         for (y; y < 3; y++) { // Normal write/finish
           EEPROM.write((40+(x*3)+y), int(serialInput[y-z]));
           mapping[x][y] = serialInput[y-z];
@@ -578,8 +604,9 @@ void remapSerial() {
 
 // Checks the values from the FreeTouch library and puts bool values into the pressed array for easy access.
 // Also takes care of reading the side button and puts it into the same array.
+bool pressedBuffer[numkeys+1];
 void readValues() {
-  if ((millis() - updateMillis) >= 1) { // Only update values once every ms
+  if ((millis() - updateMillis) >= 8) {
     // Load values into qt array (unnecessary, but useful for debugging)
     qt[0] = qt_1.measure();
     qt[1] = qt_2.measure();
@@ -589,8 +616,8 @@ void readValues() {
       qt[4] = qt_5.measure();
     #endif
     // Convert values to bools depending on threshold value (varies since screw is not aluminum)
-    for (byte x=0; x<numkeys; x++){ if (qt[x] > pressThreshold[0]) pressed[x] = 1;  else pressed[x] = 0; }
-    if (qt[numkeys] > pressThreshold[1]) pressed[numkeys] = 1;  else pressed[numkeys] = 0;
+    for (byte x=0; x<=numkeys; x++){ if (qt[x] > pressThreshold[x]) pressed[x] = 1;  else if (qt[x] < pressThreshold[x]-50 ) pressed[x] = 0; }
+    // if (qt[numkeys] > pressThreshold[1]) pressed[numkeys] = 1;  else pressed[numkeys] = 0;
   }
 }
 
