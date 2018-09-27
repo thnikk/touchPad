@@ -172,7 +172,7 @@ void setup() {
   pixels.begin(); // Initialize pins for output
   pixels.show();  // Turn all LEDs off ASAP
 
-  NKROKeyboard.begin();
+  BootKeyboard.begin();
 }
 
 /*
@@ -625,7 +625,7 @@ void readValues() {
 
 void keyboard() {
   for (byte x=0; x<=numkeys; x++){
-    if (pressed[x] && pressedLock[x]) { for (byte y=0; y<3; y++) { NKROKeyboard.press(mapping[x][y]); } pressedLock[x] = 0; }
-    if (!pressed[x] && !pressedLock[x]){ for (byte y=0; y<3; y++) { NKROKeyboard.release(mapping[x][y]); } pressedLock[x] = 1; }
+    if (pressed[x] && pressedLock[x]) { for (byte y=0; y<3; y++) { BootKeyboard.press(mapping[x][y]); } pressedLock[x] = 0; }
+    if (!pressed[x] && !pressedLock[x]){ for (byte y=0; y<3; y++) { BootKeyboard.release(mapping[x][y]); } pressedLock[x] = 1; }
   }
 }
