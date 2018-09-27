@@ -1,28 +1,18 @@
 /******* thnikk's Capacitive Touch osu! Keypad ********
-  This is code for an experimental capacitive touch
-  keypad. It uses two metal plates that can be touched
-  with your bare fingers. At the moment, it only
+  This is code for the new capacitive touch keypad. It
+  uses two metal plates covered in vinyl that can be
+  touched with your bare fingers. At the moment, it only
   suports two inputs because the trinket M0 only has
-  three QTouch-capable pins.
-
-  My idea for the third pin is to use it for the side
-  button, but using a screw instead of the button.
-  It's a little hard to reach the button on the side,
-  so using a screw would not only make it easier to
-  access with your finger (since it only needs to be
-  touched and not depressed,) but also offer a way to
-  lock the case shut, which is missing at the moment.
-
-  Planned features:
-  -Serial remapper
-  -Same LED modes as my other keypads
-  -EEPROM support
+  three QTouch-capable pins. With a library that
+  supports NKRO for the samd21, it should be possible
+  to make a 7k keypad since the ItsyBitsy M0 supports
+  up to 7 keys.
 
   Author: thnikk
 */
 
 #include "Adafruit_FreeTouch.h"
-#include <Keyboard.h>
+#include <HID-Project.h>
 #include <FlashAsEEPROM.h>
 #include <Adafruit_DotStar.h>
 #include <Adafruit_NeoPixel.h>
@@ -38,7 +28,7 @@
 
 #if numkeys == 2
 byte ftPin[] = { 3, 4, 1 }; // Trinket FreeTouch pins
-byte initMapping[] = { 122, 120, 177 };
+int initMapping[] = { 122, 120, 177 };
 // Value for determining keypress for FreeTouch
 int pressThreshold[] = { 400, 400, 550 };
 #else
@@ -63,7 +53,7 @@ Adafruit_FreeTouch qt_5 = Adafruit_FreeTouch(ftPin[4], OVERSAMPLE_8, RESISTOR_50
 // Arrays
 int qt[numkeys+1];
 bool pressed[numkeys+1];
-byte mapping[numkeys+1][3];
+int mapping[numkeys+1][3];
 byte rgb[3];
 byte bpsBuffer[3];
 byte custom[3] = { 200, 0, 200 };
@@ -72,7 +62,7 @@ byte custom[3] = { 200, 0, 200 };
 // Only one event is required for each, so this functions as a normal keyboard would.
 // It works without this, but will reduce the program speed to around 334 loops per second
 // compared to the 108,000 that can be achieved with this optimization.
-bool pressedLock[3];
+bool pressedLock[numkeys+1];
 
 // Millis timers
 unsigned long previousMillis;
@@ -106,7 +96,7 @@ byte reactCycle = 170;
 
 
 // Remap code
-byte specialLength = 34; // Number of "special keys"
+byte specialLength = 44; // Number of "special keys"
 String specialKeys[] = {
   "shift", "ctrl", "super",
   "alt", "f1", "f2", "f3",
@@ -118,7 +108,10 @@ String specialKeys[] = {
   "pgup", "pgdn", "up",
   "down", "left", "right",
   "tab", "escape", "MB1",
-  "MB2", "MB3", "altGr"
+  "MB2", "MB3", "altGr",
+  "num0","num1","num2","num3",
+  "num4","num5","num6","num7",
+  "num8","num9"
 };
 byte specialByte[] = {
   129, 128, 131, 130,
@@ -129,7 +122,9 @@ byte specialByte[] = {
   210, 213, 211, 214,
   218, 217, 216, 215,
   179, 177, 1, 2, 3,
-  134
+  134, 234, 225, 226,
+  227, 228, 229, 230,
+  231, 232, 233
 };
 
 byte inputBuffer; // Stores specialByte after conversion
@@ -176,6 +171,8 @@ void setup() {
   dotStar.show();  // Turn all LEDs off ASAP
   pixels.begin(); // Initialize pins for output
   pixels.show();  // Turn all LEDs off ASAP
+
+  NKROKeyboard.begin();
 }
 
 /*
@@ -331,10 +328,14 @@ void colorChange(){
 void customMode() {
   if ((millis() - lightMillis) > lightInterval) {
     // If either key is pressed, turn LED white.
-    for (byte x=0; x<2; x++) if (pressed[x]) { dotStar.setPixelColor(0, 0xFFFFFF); pixels.setPixelColor(0, 0xFFFFFF/2); }
+    for (byte x=0; x<2; x++) if (pressed[x]) { dotStar.setPixelColor(0, 0xFFFFFF); }
+    for (byte x=2; x<4; x++) if (pressed[x]) { pixels.setPixelColor(0, 0xFFFFFF/2); }
     // Otherwise, cycle through colors.
-    if (!pressed[0] && !pressed[1]) { dotStar.setPixelColor(0, custom[0], custom[1], custom[2]); pixels.setPixelColor(0, custom[0]/2, custom[1]/2, custom[2]/2); }
-    if (pressed[numkeys]) dotStar.setPixelColor(0, 0x000000); pixels.setPixelColor(0, 0x000000);
+    if (!pressed[0] && !pressed[1]) { dotStar.setPixelColor(0, custom[0], custom[1], custom[2]); }
+    //if (pressed[0] && pressed[1]) { dotStar.setPixelColor(0, 0x000000); }
+    if (!pressed[2] && !pressed[3]) { pixels.setPixelColor(0, custom[0]/2, custom[1]/2, custom[2]/2); }
+    //if (pressed[2] && !pressed[3]) { pixels.setPixelColor(0, 0x000000); }
+    if (pressed[numkeys]) { dotStar.setPixelColor(0, 0x000000); pixels.setPixelColor(0, 0x000000); }
     dotStar.show();
     pixels.show();
     lightMillis = millis();
@@ -509,6 +510,7 @@ void remapSerial() {
   Serial.println();
   Serial.println("If you want two or fewer modifiers for a key and");
   Serial.println("no printable characters, finish by entering 'xx'");
+  Serial.println("*numbers including num are for numpad keys");
   // End of table
 
   for (int x = 0; x <= numkeys; x++) { // Main for loop for each key
@@ -623,7 +625,7 @@ void readValues() {
 
 void keyboard() {
   for (byte x=0; x<=numkeys; x++){
-    if (pressed[x] && pressedLock[x]) { for (byte y=0; y<3; y++) { Keyboard.press(mapping[x][y]); } pressedLock[x] = 0; }
-    if (!pressed[x] && !pressedLock[x]){ for (byte y=0; y<3; y++) { Keyboard.release(mapping[x][y]); } pressedLock[x] = 1; }
+    if (pressed[x] && pressedLock[x]) { for (byte y=0; y<3; y++) { NKROKeyboard.press(mapping[x][y]); } pressedLock[x] = 0; }
+    if (!pressed[x] && !pressedLock[x]){ for (byte y=0; y<3; y++) { NKROKeyboard.release(mapping[x][y]); } pressedLock[x] = 1; }
   }
 }
