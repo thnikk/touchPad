@@ -1,18 +1,28 @@
 /******* thnikk's Capacitive Touch osu! Keypad ********
-  This is code for the new capacitive touch keypad. It
-  uses two metal plates covered in vinyl that can be
-  touched with your bare fingers. At the moment, it only
+  This is code for an experimental capacitive touch
+  keypad. It uses two metal plates that can be touched
+  with your bare fingers. At the moment, it only
   suports two inputs because the trinket M0 only has
-  three QTouch-capable pins. With a library that
-  supports NKRO for the samd21, it should be possible
-  to make a 7k keypad since the ItsyBitsy M0 supports
-  up to 7 keys.
+  three QTouch-capable pins.
+
+  My idea for the third pin is to use it for the side
+  button, but using a screw instead of the button.
+  It's a little hard to reach the button on the side,
+  so using a screw would not only make it easier to
+  access with your finger (since it only needs to be
+  touched and not depressed,) but also offer a way to
+  lock the case shut, which is missing at the moment.
+
+  Planned features:
+  -Serial remapper
+  -Same LED modes as my other keypads
+  -EEPROM support
 
   Author: thnikk
 */
 
 #include "Adafruit_FreeTouch.h"
-#include <HID-Project.h>
+#include <Keyboard.h>
 #include <FlashAsEEPROM.h>
 #include <Adafruit_DotStar.h>
 #include <Adafruit_NeoPixel.h>
@@ -171,8 +181,6 @@ void setup() {
   dotStar.show();  // Turn all LEDs off ASAP
   pixels.begin(); // Initialize pins for output
   pixels.show();  // Turn all LEDs off ASAP
-
-  BootKeyboard.begin();
 }
 
 /*
@@ -207,7 +215,7 @@ void loop() {
   readValues();
 
   // Set LED mode
-  if (ledMode == 0) cycle();
+  if (ledMode == 0) cycle(); //halloween(); //cycle();
   if (ledMode == 1) reactive(0);
   if (ledMode == 2) reactive(1);
   if (ledMode == 3) colorChange();
@@ -339,6 +347,29 @@ void customMode() {
     dotStar.show();
     pixels.show();
     lightMillis = millis();
+  }
+}
+
+byte hBrightness;
+unsigned long flickerMillis;
+unsigned long fadeMillis;
+unsigned long flickerInterval = 0;
+int fadeSpeed = 5; // Higher is slower
+
+void halloween() {
+  //random(min,max)
+  if ((millis() - flickerMillis) > flickerInterval) {
+    wheel(random(130,135));
+    flickerMillis = millis();
+    flickerInterval = random(10, 600);
+    hBrightness = 255;
+  }
+  if ((millis() - fadeMillis) > fadeSpeed) {
+    hBrightness--;
+    dotStar.setPixelColor(0, (rgb[0]*hBrightness)/255, (rgb[1]*hBrightness)/255, (rgb[2]*hBrightness)/255);
+    //dotStar.setPixelColor(0, rgb[0], rgb[1], rgb[2]);
+    dotStar.show();
+    fadeMillis = millis();
   }
 }
 
@@ -625,7 +656,7 @@ void readValues() {
 
 void keyboard() {
   for (byte x=0; x<=numkeys; x++){
-    if (pressed[x] && pressedLock[x]) { for (byte y=0; y<3; y++) { BootKeyboard.press(mapping[x][y]); } pressedLock[x] = 0; }
-    if (!pressed[x] && !pressedLock[x]){ for (byte y=0; y<3; y++) { BootKeyboard.release(mapping[x][y]); } pressedLock[x] = 1; }
+    if (pressed[x] && pressedLock[x]) { for (byte y=0; y<3; y++) { Keyboard.press(mapping[x][y]); } pressedLock[x] = 0; }
+    if (!pressed[x] && !pressedLock[x]){ for (byte y=0; y<3; y++) { Keyboard.release(mapping[x][y]); } pressedLock[x] = 1; }
   }
 }
