@@ -40,12 +40,12 @@
 byte ftPin[] = { 3, 4, 1 }; // Trinket FreeTouch pins
 int initMapping[] = { 122, 120, 177 };
 // Value for determining keypress for FreeTouch
-int pressThreshold[] = { 400, 400, 550 };
+int pressThreshold[] = { 450, 450, 550 };
 #else
 byte ftPin[] = { A0, A1, A2, A3, 9 }; // ItsyBitsy FreeTouch pins
 byte initMapping[] = { 122, 120, 99, 118, 177 };
 // Value for determining keypress for FreeTouch
-int pressThreshold[] = { 600, 400, 400, 500, 550 };
+int pressThreshold[] = { 600, 400, 400, 550, 550 };
 #endif
 
 // Constructors
