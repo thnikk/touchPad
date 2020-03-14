@@ -1,3 +1,5 @@
+.pio
+lib
 .pioenvs
 .piolibdeps
 .clang_complete
